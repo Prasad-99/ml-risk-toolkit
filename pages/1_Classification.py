@@ -1,4 +1,5 @@
 import streamlit as st
+import matplotlib.pyplot as plt
 import time as time
 from utils.config.Configuration import set_page_config
 from models import classification_models
@@ -138,10 +139,77 @@ with tabs[1]:
     if st.button("View Class Distribution", use_container_width=True):
         file_path = processed_paths[selected_dataset]
         target_column = "default.payment.next.month"
-        plt = classification_models.plot_class_distribution(file_path, target_column)
-        st.pyplot(plt)
-        
+        fig, ratio = classification_models.plot_class_distribution(file_path, target_column)
+        st.pyplot(fig)
 
+        st.markdown(f"""
+        <div style="text-align: center;">
+            <p><strong>Class 0 (No Default):</strong> {ratio[0]:.2f}</p>
+            <p><strong>Class 1 (Default):</strong> {ratio[1]:.2f}</p>
+        </div>
+        """, unsafe_allow_html=True)
+
+        st.info("**Note**: Typically, if the ratio of the majority class to the minority class exceeds 80-20 (or is even more extreme, like 90-10), it’s considered imbalanced.")
+
+        if ratio[0] > 0.9:
+            st.warning("The dataset is imbalanced. Consider using techniques like SMOTE or ADASYN for balancing.")
+        else:
+            st.success("The dataset is balanced. No further action needed.")
+        
+        with st.expander("When is a dataset considered imbalanced?"):
+            markdown_text = """
+            A dataset is **imbalanced** when one class appears significantly more frequently than others.  
+            Typically, if the ratio of the majority class to the minority class exceeds **80-20** (or is even more extreme, like **90-10**),  
+            it’s considered imbalanced. This is a problem because models tend to favor the dominant class,  
+            leading to poor generalization and weak predictive power for the minority class.
+
+            ### **How to fix class imbalance?**
+            Here are some techniques to handle imbalance:
+
+            **1. Resampling (Oversampling & Undersampling)**  
+            - **Oversampling the minority class**: Create synthetic samples of the minority class using methods like  
+            **SMOTE (Synthetic Minority Over-sampling Technique)**.  
+            - **Undersampling the majority class**: Remove random samples from the dominant class to balance the dataset.
+
+            **2. Adjust Class Weights**  
+            - Many machine learning models allow you to set **class weights** so that errors in predicting the minority class  
+            are penalized more, forcing the model to pay attention to them.
+
+            **3. Use Different Evaluation Metrics**  
+            - Instead of accuracy (which is misleading in imbalanced datasets), use:  
+            - **Precision & Recall**  
+            - **F1-score**  
+            - **ROC-AUC (Receiver Operating Characteristic - Area Under Curve)**  
+
+            **4. Try Advanced Algorithms**  
+            Some algorithms handle imbalance better than others:  
+            - Tree-based methods like **XGBoost** allow you to set parameters to focus on rare events.  
+            - **Anomaly detection methods** (useful if minority cases are rare but crucial).  
+            """
+            st.markdown(markdown_text)
+
+    st.markdown("**3. Data Visualization**: Use visualizations to understand relationships between features and the target variable.")
+    
+    if st.button("View Data Visualization", use_container_width=True):
+        file_path = processed_paths[selected_dataset]
+        target_column = "default.payment.next.month"
+        plot = classification_models.plot_feature_target_correlation(file_path, target_column)
+        
+        st.pyplot(plot)
+
+        st.markdown("### Insights from Feature-Target Correlation")
+        st.write("The bar chart above shows the correlation of each feature with the target variable. Here are some key insights:")
+        
+        st.markdown("""
+        - **PAY_0, PAY_2, PAY_3, PAY_4, PAY_5, PAY_6**: These features have the highest positive correlation with the target variable, indicating that repayment status is a strong predictor of default.
+        - **LIMIT_BAL**: Shows a slight negative correlation, suggesting that higher credit limits may reduce the likelihood of default.
+        - **BILL_AMT and PAY_AMT features**: These have weak correlations with the target, indicating they may not be as significant for predicting default.
+        - **ID**: Has almost no correlation with the target, as expected, since it is just an identifier.
+        """)
+
+        st.info("**Note**: Features with high correlation (positive or negative) are more likely to be important for the model. However, feature selection should also consider multicollinearity and domain knowledge.")
+
+        st.success("EDA completed! You can explore further by adding techniques like feature scaling, correlation heatmaps, or PCA. Once satisfied, proceed to the Model Training section.")
 with tabs[2]:
     st.subheader("Choose Model & Set Parameters")
     st.write("This is where you will train the model.")
