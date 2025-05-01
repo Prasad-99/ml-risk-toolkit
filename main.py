@@ -1,6 +1,8 @@
-def main():
-    print("Hello from ml-risk-toolkit!")
+import streamlit as st
+from utils.config.Configuration import set_page_config
+# Set the page configuration
+set_page_config()
 
+st.title("ML Risk Toolkit")
 
-if __name__ == "__main__":
-    main()
+st.button("Classification")
