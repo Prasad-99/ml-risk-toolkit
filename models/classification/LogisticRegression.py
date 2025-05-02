@@ -28,7 +28,7 @@ def standardize_features(X_train, X_test):
     scaler = StandardScaler()
     X_train_scaled = scaler.fit_transform(X_train)
     X_test_scaled = scaler.transform(X_test)
-    return X_train_scaled, X_test_scaled
+    return X_train_scaled, X_test_scaled, scaler
 
 def train_logistic_regression(X_train, y_train, solver, C, penalty, class_weight, max_iter=1000, random_state=42):
     st.caption("Training Logistic Regression model...")
@@ -87,11 +87,11 @@ def plot_feature_importance(model, feature_names):
 def run_logistic_regression_pipeline(file_path, target_column, test_size, random_state, solver, C, penalty, class_weight):
     X, y = load_dataset(file_path, target_column)
     X_train, X_test, y_train, y_test = split_data(X, y, test_size, random_state)
-    X_train_scaled, X_test_scaled = standardize_features(X_train, X_test)
+    X_train_scaled, X_test_scaled, scaler = standardize_features(X_train, X_test)
     model = train_logistic_regression(X_train_scaled, y_train, solver, C, penalty, class_weight)
     accuracy, confusion, report = evaluate_model(model, X_test_scaled, y_test)
     fig = plot_confusion_matrix(confusion)
     roc_fig = plot_roc_auc(model, X_test_scaled, y_test)
     feature_importance_fig = plot_feature_importance(model, X.columns)
-    return accuracy, confusion, report, fig, roc_fig, feature_importance_fig
+    return accuracy, confusion, report, fig, roc_fig, feature_importance_fig, model, X_train_scaled, X_test_scaled, y_train, y_test, scaler
 

@@ -4,12 +4,13 @@ import time
 from utils.config.Configuration import set_page_config
 from utils.helper import eda
 from models.classification import LogisticRegression
+from utils.helper import gridsearch
 set_page_config()
 
-st.title("ML Classification")
-st.caption("Understand how ML classification models work using risk datasets")
+st.title("Classification Models in Financial Risk Analysis 📈")
+st.caption("Understand how basic ML classification models work using different risk datasets")
 
-tabs = st.tabs(["1. Load Data", "2. Explore", "3. Train Model", "4. Evaluate Model", "5. Insights"])
+tabs = st.tabs(["1. Load Data", "2. Explore", "3. Train Model", "4. Evaluate Model", "5. Tuning", "6. Predictions", "7. Insights"])
 raw_paths = {"Credit Risk (Loan Default - Binary Classification)": "data\\raw\\UCI_Credit_Card.csv",
          "Operational Risk (Fraud Detection - Binary Classification)": "data\\raw\\Fraud_Detection.csv",
         "Credit Risk (Credit Rating Classification - Multi-Class Classification)": "data\\raw\\Credit_Rating.csv"}
@@ -17,6 +18,10 @@ raw_paths = {"Credit Risk (Loan Default - Binary Classification)": "data\\raw\\U
 processed_paths = {"Credit Risk (Loan Default - Binary Classification)": "data\\processed\\UCI_Credit_Card_Cleaned.csv",
             "Operational Risk (Fraud Detection - Binary Classification)": "data\\processed\\Fraud_Detection_Cleaned.csv",
             "Credit Risk (Credit Rating Classification - Multi-Class Classification)": "data\\processed\\Credit_Rating_Cleaned.csv"}
+
+sample_paths = {"Credit Risk (Loan Default - Binary Classification)": "data\\sample\\UCI_Credit_Card_Sample.csv",
+            "Operational Risk (Fraud Detection - Binary Classification)": "data\\sample\\Fraud_Detection_Sample.csv",
+            "Credit Risk (Credit Rating Classification - Multi-Class Classification)": "data\\sample\\Credit_Rating_Sample.csv"}
 
 models = {"Credit Risk (Loan Default - Binary Classification)": ["Logistic Regression","Random Forest", "KNN"],
           "Operational Risk (Fraud Detection - Binary Classification)": ["XGBoost", "SVM"],
@@ -283,17 +288,26 @@ with tabs[2]:
                 file_path = processed_paths[selected_dataset]
                 target_column = target_columns[selected_dataset]
                 try:
-                    accuracy, confusion, report, fig, roc_fig, feature_importance_fig = LogisticRegression.run_logistic_regression_pipeline(
+                    accuracy, confusion, report, fig, roc_fig, feature_importance_fig, trained_model, X_train_scaled, X_test_scaled, y_train, y_test, scaler \
+                    = LogisticRegression.run_logistic_regression_pipeline(
                         file_path, target_column, test_size, random_state, solver, C, penalty, class_weight
                     )
                     st.success("Model trained successfully!")
 
-                    st.markdown("### Model Evaluation Report")
-                    st.write(f"**Accuracy**: {accuracy:.2f}")
-                    st.write("**Confusion Matrix**:")
-                    st.write(confusion)
-                    st.write("**Classification Report**:")
-                    st.dataframe(report)
+                    # Store the variables in session state
+                    st.session_state.accuracy = accuracy
+                    st.session_state.confusion = confusion
+                    st.session_state.report = report
+                    st.session_state.fig = fig
+                    st.session_state.roc_fig = roc_fig
+                    st.session_state.feature_importance_fig = feature_importance_fig
+                    st.session_state.trained_model = trained_model
+                    st.session_state.X_train_scaled = X_train_scaled
+                    st.session_state.X_test_scaled = X_test_scaled
+                    st.session_state.y_train = y_train
+                    st.session_state.y_test = y_test
+                    st.session_state.scaler = scaler
+
                 except Exception as e:
                     st.error(f"Error: {e}")
                     st.warning("Please check the parameters and try again.")
@@ -362,67 +376,171 @@ with tabs[3]:
         st.write(content)
     
     st.markdown("**Model Performance Metrics**")
-    try:
-        metrics = {
-            "Accuracy": accuracy,
-            "Precision": report.loc["1", "precision"],
-            "Recall": report.loc["1", "recall"],
-            "F1 Score": report.loc["1", "f1-score"],
-            "Support": report.loc["1", "support"]
-        }
-    except NameError:
-        metrics = {
-            "Accuracy": 0.0,
-            "Precision": 0.0,
-            "Recall": 0.0,
-            "F1 Score": 0.0,
-            "Support": 0.0
-        }
-    metrics_df = pd.DataFrame(metrics, index=[0])
-    st.dataframe(metrics_df)
+    if st.button("View Model Performance Metrics", use_container_width=True):
+        try:
+            metrics = {
+                "Accuracy": st.session_state.accuracy,
+                "Precision": st.session_state.report.loc["1", "precision"],
+                "Recall": st.session_state.report.loc["1", "recall"],
+                "F1 Score": st.session_state.report.loc["1", "f1-score"],
+                "Support": st.session_state.report.loc["1", "support"]
+            }
+        except NameError:
+            st.warning("Model not trained yet!")
+            metrics = {
+                "Accuracy": 0.0,
+                "Precision": 0.0,
+                "Recall": 0.0,
+                "F1 Score": 0.0,
+                "Support": 0.0
+            }
+        metrics_df = pd.DataFrame(metrics, index=[0])
+        st.dataframe(metrics_df)
 
     col1, col2, col3 = st.columns(3)
-    try:
-        with col1:
-            st.markdown("**Confusion Matrix**")
-            st.pyplot(fig, use_container_width=True)
-            st.caption("The confusion matrix shows the counts of true positives, true negatives, false positives, and false negatives for the model's predictions.")
-        with col2:
-            st.markdown("**ROC Curve**")
-            st.pyplot(roc_fig, use_container_width=True)
-            st.caption("The ROC curve shows the trade-off between true positive rate and false positive rate at various thresholds.")
-        with col3:
-            st.markdown("**Feature Importance**")
-            st.pyplot(feature_importance_fig, use_container_width=True)
-            st.caption("Feature importance indicates the contribution of each feature to the model's predictions.")
-    except NameError:
-        st.warning("Graphs are not available. Please ensure the model is trained successfully.")
-        import matplotlib.pyplot as plt
-        fig, ax = plt.subplots()
-        ax.text(0.5, 0.5, 'Placeholder Graph', horizontalalignment='center', verticalalignment='center', fontsize=12)
-        with col1:
-            st.markdown("**Confusion Matrix**")
-            st.pyplot(fig, use_container_width=True)
-        with col2:
-            st.markdown("**ROC Curve**")
-            st.pyplot(fig, use_container_width=True)
-        with col3:
-            st.markdown("**Feature Importance**")
-            st.pyplot(fig, use_container_width=True)
+    if st.button("View Model Evaluation Graphs", use_container_width=True):
+        try:
+            with col1:
+                st.markdown("**Confusion Matrix**")
+                st.pyplot(st.session_state.fig, use_container_width=True)
+                st.caption("The confusion matrix shows the counts of true positives, true negatives, false positives, and false negatives for the model's predictions.")
+            with col2:
+                st.markdown("**ROC Curve**")
+                st.pyplot(st.session_state.roc_fig, use_container_width=True)
+                st.caption("The ROC curve shows the trade-off between true positive rate and false positive rate at various thresholds.")
+            with col3:
+                st.markdown("**Feature Importance**")
+                st.pyplot(st.session_state.feature_importance_fig, use_container_width=True)
+                st.caption("Feature importance indicates the contribution of each feature to the model's predictions.")
+        except NameError:
+            st.warning("Graphs are not available. Please ensure the model is trained successfully.")
+            import matplotlib.pyplot as plt
+            fig, ax = plt.subplots()
+            ax.text(0.5, 0.5, 'Placeholder Graph', horizontalalignment='center', verticalalignment='center', fontsize=12)
+            with col1:
+                st.markdown("**Confusion Matrix**")
+                st.pyplot(fig, use_container_width=True)
+            with col2:
+                st.markdown("**ROC Curve**")
+                st.pyplot(fig, use_container_width=True)
+            with col3:
+                st.markdown("**Feature Importance**")
+                st.pyplot(fig, use_container_width=True)
 
-    st.info("**Note**: This is not it. We can further improve the model's performance by tuning hyperparameters, using ensemble methods, or trying different algorithms. Lets explore the parameter tuning in the next section.")
+        st.info("**Note**: This is not the end. We can further improve the model's performance by tuning hyperparameters, using ensemble methods, or trying different algorithms. Lets explore the parameter tuning in the next section.")
+
 with tabs[4]:
-    st.subheader("Model Insights & Tuning Tips")
-    st.write("This is where you will provide insights and tuning tips for the model.")
+    st.subheader("Performance Tuning")
+    st.write("This is where you will tune the model's performance.")
 
-    with st.expander("Feature Importance"):
-        st.write("Feature importance will be displayed here.")
-        #st.image("path_to_feature_importance.png", caption="Feature Importance")
+    st.markdown("### What is Hyperparameter Tuning?")
+    st.write("Hyperparameter tuning is the process of finding the optimal values for parameters that control a machine learning model's learning process but are not learned from data. These parameters affect model complexity, performance, and generalization")
+    st.write("- GridSearchCV systematically tests hyperparameters to find the best combination")
+    st.write("- RandomizedSearchCV randomly samples hyperparameters, making it faster for large search spaces")
+    st.write("- Finds the best combination of hyperparameters using cross-validation")
+    st.write("- Again assesses performance using accuracy, precision, recall, and F1-score")
 
-    st.markdown("### Tuning Tips")
-    st.write("1. For Random Forest, try increasing the number of trees and max depth.")
-    st.write("2. For XGBoost, try adjusting the learning rate and number of trees.")
-    st.write("3. For Logistic Regression, try different penalties and regularization strengths.")
-    st.write("4. Always validate your model using cross-validation.")
-    st.write("5. Use Grid Search or Random Search for hyperparameter tuning.")
+    st.markdown("**We will use following parameter grid**")
+    param_grid = {
+        "penalty": ["l1", "l2", "elasticnet", "none"],
+        "class_weight": ["None", "balanced"],
+        "C": [0.01, 0.1, 1, 10],
+        "solver": ["liblinear", "lbfgs", "saga", "newton-cg", "sag"],
+        "max_iter": [100, 200, 300, 400, 500],
+    }
+    st.dataframe(pd.DataFrame.from_dict(param_grid, orient="index").transpose())
+
+    if st.button("Lets Tune The Hyperparameters", use_container_width=True):
+        with st.status("Tuning... Please wait", expanded=True):
+            if "trained_model" not in st.session_state:
+                st.warning("Please train the model first.")
+            else:
+                file_path = processed_paths[selected_dataset]
+                target_column = target_columns[selected_dataset]
+                try:
+                    best_params, best_score = gridsearch.perform_grid_search(
+                        st.session_state.trained_model,
+                        param_grid,
+                        st.session_state.X_train_scaled,
+                        st.session_state.y_train,
+                        st.session_state.X_test_scaled,
+                        st.session_state.y_test,
+                        )
+                    st.write(f"Best Parameters:")
+                    st.dataframe(best_params)
+                    st.write(f"Best Accuracy Score: {best_score:.4f}")
+
+                except Exception as e:
+                    st.error(f"Error: {e}")
+                    st.warning("Please check the if the model is trained and try again.")
+        
+        st.info("**Note**: GridSearchCV does not always guarantee the best possible score because it searches over a predefined set of hyperparameters provided by you.\n" \
+        "You can also use RandomizedSearchCV, Bayesian Optimization or ested cross-validation for a more efficient search over a larger hyperparameter space.")
+
+with tabs[5]:
+    st.subheader("Predictions")
+    st.write("This is where you will make predictions using the trained model.")
+
+    st.markdown("### Make Predictions")
+    st.write("You can input new data to make predictions using the trained model.")
+
+    # Input fields for new data
+    limit_bal = st.number_input("Limit Balance", min_value=0, max_value=1000000, value=50000, step=1000)
+
+    sex = st.selectbox("Sex", ["Male", "Female"])
+    sex = 1 if sex == "Male" else 2
+
+    education = st.selectbox("Education", ["Graduate School", "University", "High School", "Others"])
+    if education == "Graduate School":
+        education = 1
+    elif education == "University":
+        education = 2
+    elif education == "High School":
+        education = 3
+    else:
+        education = 4
+
+    marriage = st.selectbox("Marriage", ["Married", "Single", "Others"])
+    if marriage == "Married":
+        marriage = 1
+    elif marriage == "Single":
+        marriage = 2
+    else:
+        marriage = 3
+    
+    age = st.number_input("Age", min_value=0, max_value=100, value=30, step=1)
+
+    input_data = pd.read_csv(sample_paths[selected_dataset])
+    input_data.at[0, 'LIMIT_BAL'] = int(limit_bal)
+    input_data.at[0, 'SEX'] = int(sex)
+    input_data.at[0, 'EDUCATION'] = int(education)
+    input_data.at[0, 'MARRIAGE'] = int(marriage)
+    input_data.at[0, 'AGE'] = int(age)
+    X = input_data.drop(target_columns[selected_dataset], axis=1)
+
+    if st.button("Make Prediction", use_container_width=True):
+        with st.status("Making prediction... Please wait", expanded=True):
+            try:
+                # Ensure input data is preprocessed using the same scaler as training data
+                X_scaled = st.session_state.scaler.transform(X)
+                prediction = st.session_state.trained_model.predict(X_scaled)
+                prediction_proba = st.session_state.trained_model.predict_proba(X_scaled)
+                st.success(f"Prediction: {prediction[0]}. The client will {'default' if prediction[0] == 1 else 'not default'}")
+                st.success(f"Prediction Probability: {prediction_proba[0]}")
+            except Exception as e:
+                st.error(f"Error: {e}")
+                st.warning("Please check if the model is trained and try again.")
+        st.info("**Note**: The prediction is based on the trained model and the input data. Ensure that the input data is preprocessed in the same way as the training data.")
+
+with tabs[6]:
+    st.subheader("Model Insights")
+    st.write("This is where you will provide insights about the model.")
+
+    with st.expander("**Model Insights**"):
+        st.markdown("""
+        - **Feature Importance**: The most important features for predicting loan default are PAY_0, PAY_2, and PAY_3.
+        - **Model Performance**: The model achieved an accuracy of 0.80, indicating it correctly predicted 80% of the cases.
+        - **Class Imbalance**: The dataset was imbalanced, but techniques like SMOTE can help balance it.
+        - **ROC Curve**: The ROC curve shows a good trade-off between true positive and false positive rates.
+        """)
 
