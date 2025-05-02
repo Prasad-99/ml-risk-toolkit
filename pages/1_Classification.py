@@ -1,8 +1,8 @@
 import streamlit as st
-import matplotlib.pyplot as plt
-import time as time
+import time
 from utils.config.Configuration import set_page_config
-from models import classification_models
+from utils.helper import eda
+from models.classification import LogisticRegression
 set_page_config()
 
 st.title("ML Classification")
@@ -17,6 +17,14 @@ processed_paths = {"Credit Risk (Loan Default - Binary Classification)": "data\\
             "Operational Risk (Fraud Detection - Binary Classification)": "data\\processed\\Fraud_Detection_Cleaned.csv",
             "Credit Risk (Credit Rating Classification - Multi-Class Classification)": "data\\processed\\Credit_Rating_Cleaned.csv"}
 
+models = {"Credit Risk (Loan Default - Binary Classification)": ["Logistic Regression","Random Forest", "KNN"],
+          "Operational Risk (Fraud Detection - Binary Classification)": ["XGBoost", "SVM"],
+          "Credit Risk (Credit Rating Classification - Multi-Class Classification)": ["Random Forest", "SVM"]}
+
+target_columns = {"Credit Risk (Loan Default - Binary Classification)": "default.payment.next.month",
+                     "Operational Risk (Fraud Detection - Binary Classification)": "is_fraud",
+                     "Credit Risk (Credit Rating Classification - Multi-Class Classification)": "credit_rating"}
+
 with tabs[0]:
     st.subheader("Select Dataset")
     selected_dataset = st.selectbox("--Select from dropdown--", ["Credit Risk (Loan Default - Binary Classification)", 
@@ -30,7 +38,7 @@ with tabs[0]:
         st.write("This dataset contains information on default payments, demographic factors, credit data, history of payment, and bill statements of credit card clients in Taiwan from April 2005 to September 2005.")
         st.caption("**Source**: UCI Machine Learning Repository")
 
-        with st.expander("Learn More"):
+        with st.expander("Learn more about the dataset"):
             st.subheader("Dataset Content")
             st.write("There are 25 variables in this dataset:")
             st.markdown("""
@@ -64,7 +72,7 @@ with tabs[0]:
         explore_data = st.button("View Data", use_container_width=True)
         if explore_data:
             file_path = raw_paths[selected_dataset]
-            raw_data, data_description = classification_models.explore_data(file_path)
+            raw_data, data_description = eda.explore_data(file_path)
             st.caption("Raw Data")
             st.dataframe(raw_data.head())
             st.caption("Data Description")
@@ -114,14 +122,14 @@ with tabs[1]:
 
     if st.button("Clean the selected dataset", use_container_width=True):
         file_path = raw_paths[selected_dataset]
-        missing_row_df = classification_models.check_missing_rows(file_path)
+        missing_row_df = eda.check_missing_rows(file_path)
         st.caption("Missing Rows Data")
         st.dataframe(missing_row_df.head())
         if missing_row_df.shape[0] > 0:
             st.warning(f"{missing_row_df.shape[0]} Missing values found in the dataset! Please clean the data.")
 
             with st.status("Cleaning... Please wait"):
-                classification_models.remove_missing_rows(file_path, missing_row_df)
+                eda.remove_missing_rows(file_path, missing_row_df)
                 time.sleep(3)
                 st.success("Data cleaned successfully!")
         
@@ -138,8 +146,10 @@ with tabs[1]:
 
     if st.button("View Class Distribution", use_container_width=True):
         file_path = processed_paths[selected_dataset]
-        target_column = "default.payment.next.month"
-        fig, ratio = classification_models.plot_class_distribution(file_path, target_column)
+        target_column = target_columns[selected_dataset]
+        with st.status("Plotting... Please wait"):
+            fig, ratio = eda.plot_class_distribution(file_path, target_column)
+            time.sleep(2)
         st.pyplot(fig)
 
         st.markdown(f"""
@@ -192,9 +202,10 @@ with tabs[1]:
     
     if st.button("View Data Visualization", use_container_width=True):
         file_path = processed_paths[selected_dataset]
-        target_column = "default.payment.next.month"
-        plot = classification_models.plot_feature_target_correlation(file_path, target_column)
-        
+        target_column = target_columns[selected_dataset]
+        with st.status("Plotting... Please wait"):
+            plot = eda.plot_feature_target_correlation(file_path, target_column)
+            time.sleep(2)
         st.pyplot(plot)
 
         st.markdown("### Insights from Feature-Target Correlation")
@@ -212,9 +223,9 @@ with tabs[1]:
         st.success("EDA completed! You can explore further by adding techniques like feature scaling, correlation heatmaps, or PCA. Once satisfied, proceed to the Model Training section.")
 with tabs[2]:
     st.subheader("Choose Model & Set Parameters")
-    st.write("This is where you will train the model.")
+    st.caption(f"This is where you will train the model. For our selected dataset, we will use the following models: {models[selected_dataset]}")
 
-    model_name = st.selectbox("Select Model", ["Logistic Regression", "Random Forest", "XGBoost"])
+    model_name = st.selectbox("Select Model", models[selected_dataset])
 
     st.markdown("### Model Parameters")
     if model_name == "Random Forest":
@@ -224,14 +235,62 @@ with tabs[2]:
         n_estimators = st.slider("Number of Trees", min_value=10, max_value=100, value=50, step=10)
         learning_rate = st.slider("Learning Rate", min_value=0.01, max_value=0.3, value=0.1, step=0.01)
     elif model_name == "Logistic Regression":
-        penalty = st.selectbox("Penalty", ["l1", "l2"])
-        C = st.slider("Inverse Regularization Strength", min_value=0.01, max_value=10.0, value=1.0, step=0.01)
-    
-    test_size = st.slider("Test Size", min_value=0.1, max_value=0.5, value=0.2, step=0.01)
-    random_state = st.number_input("Random State", min_value=0, max_value=100, value=42, step=1)
+        with st.expander("**First learn about the important hyperparameters**"):
+            # Markdown content for parameters
+            markdown_text = """
+            **1. Penalty (`penalty`)**
+            - Adds regularization to prevent overfitting. 
+                - `l1` (Lasso): Shrinks some coefficients to zero (feature selection).
+                - `l2` (Ridge): Shrinks coefficients without eliminating features.
+                - `elasticnet`: Combines Lasso and Ridge.
 
-    if st.button("Train Model"):
-        st.success("Model trained successfully!")
+            **2. Regularization Strength (`C`)**
+            - Controls regularization strength. 
+                - Lower values: Stronger regularization (less overfitting).
+                - Higher values: Weaker regularization (more flexibility).
+
+            **3. Solver (`solver`)**
+            - Optimization algorithm.
+                - `liblinear`: Small datasets, L1 penalty.
+                - `lbfgs`, `newton-cg`: Large datasets, L2 penalty.
+                - `sag`, `saga`: Very large datasets, supports both penalties.
+
+            **4. Maximum Iterations (`max_iter`)**
+            - Number of optimization iterations.
+                - Increase if convergence isn’t reached.
+                - Too high values may slow training.
+
+            **5. Class Weight (`class_weight`)**
+            - Adjusts weights for imbalanced classes.
+                - `'balanced'`: Auto-balances weights based on class frequencies.
+                - Custom weights: Improve predictions for imbalanced datasets.
+            """
+            # Display content using Streamlit markdown
+            st.markdown(markdown_text)
+
+        penalty = st.selectbox("**Penalty**", ["l1", "l2", "elasticnet", "none"])
+        C = st.slider("**Inverse Regularization Strength**", min_value=0.01, max_value=10.0, value=1.0, step=0.01)
+        solver = st.selectbox("**Solver**", ["newton-cg", "lbfgs", "liblinear", "sag", "saga"])
+        max_iter = st.number_input("**Max Iterations**", min_value=100, max_value=1000, value=200, step=100)
+        class_weight = st.selectbox("**Class Weight**", ["balanced", "none"])
+
+        test_size = st.slider("**Test Size**", min_value=0.1, max_value=0.5, value=0.2, step=0.01)
+        random_state = st.number_input("**Random State**", min_value=0, max_value=100, value=42, step=1)
+
+        if st.button("Train Model", use_container_width=True):
+            with st.status("Training... Please wait"):
+                file_path = processed_paths[selected_dataset]
+                target_column = target_columns[selected_dataset]
+                try:
+                    accuracy, confusion, report = LogisticRegression.run_logistic_regression_pipeline(
+                        file_path, target_column, test_size, random_state, solver, C, penalty, class_weight
+                    )
+                    st.success("Model trained successfully!")
+                except Exception as e:
+                    st.error(f"Error: {e}")
+                    st.warning("Please check the parameters and try again.")
+                
+                
 
 with tabs[3]:
     st.subheader("Model Evaluation")
