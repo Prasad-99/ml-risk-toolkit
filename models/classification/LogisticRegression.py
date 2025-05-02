@@ -1,3 +1,5 @@
+from matplotlib import pyplot as plt
+import seaborn as sns
 import pandas as pd
 import streamlit as st
 import time
@@ -42,9 +44,43 @@ def evaluate_model(model, X_test, y_test):
     y_pred = model.predict(X_test)
     accuracy = accuracy_score(y_test, y_pred)
     confusion = confusion_matrix(y_test, y_pred)
-    report = classification_report(y_test, y_pred)
+    report = classification_report(y_test, y_pred, output_dict=True)
+    report_df = pd.DataFrame(report).transpose()
     st.caption("Model evaluation completed!")
-    return accuracy, confusion, report
+    return accuracy, confusion, report_df
+
+def plot_confusion_matrix(confusion):
+    fig, ax = plt.subplots(figsize=(8, 6))
+    sns.heatmap(confusion, annot=True, fmt='d', cmap='Blues', ax=ax)
+    ax.set_xlabel('Predicted')
+    ax.set_ylabel('True')
+    ax.set_title('Confusion Matrix')
+    return fig
+
+def plot_roc_auc(model, X_test, y_test):
+    from sklearn.metrics import roc_curve, auc
+    y_prob = model.predict_proba(X_test)[:, 1]
+    fpr, tpr, _ = roc_curve(y_test, y_prob)
+    roc_auc = auc(fpr, tpr)
+
+    fig, ax = plt.subplots(figsize=(8, 6))
+    ax.plot(fpr, tpr, label='ROC curve (area = {:.2f})'.format(roc_auc), color='blue')
+    ax.plot([0, 1], [0, 1], 'r--')
+    ax.set_xlabel('False Positive Rate')
+    ax.set_ylabel('True Positive Rate')
+    ax.set_title('Receiver Operating Characteristic (ROC) Curve')
+    ax.legend(loc='lower right')
+    return fig
+
+def plot_feature_importance(model, feature_names):
+    importance = model.coef_[0]
+    feature_importance = pd.DataFrame({'Feature': feature_names, 'Importance': importance})
+    feature_importance = feature_importance.sort_values(by='Importance', ascending=False)
+
+    fig, ax = plt.subplots(figsize=(10, 6))
+    sns.barplot(x='Importance', y='Feature', data=feature_importance, ax=ax)
+    ax.set_title('Feature Importance')
+    return fig
 
 # Main execution
 
@@ -54,5 +90,8 @@ def run_logistic_regression_pipeline(file_path, target_column, test_size, random
     X_train_scaled, X_test_scaled = standardize_features(X_train, X_test)
     model = train_logistic_regression(X_train_scaled, y_train, solver, C, penalty, class_weight)
     accuracy, confusion, report = evaluate_model(model, X_test_scaled, y_test)
-    return accuracy, confusion, report
+    fig = plot_confusion_matrix(confusion)
+    roc_fig = plot_roc_auc(model, X_test_scaled, y_test)
+    feature_importance_fig = plot_feature_importance(model, X.columns)
+    return accuracy, confusion, report, fig, roc_fig, feature_importance_fig
 

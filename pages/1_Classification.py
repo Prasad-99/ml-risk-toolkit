@@ -1,3 +1,4 @@
+import pandas as pd
 import streamlit as st
 import time
 from utils.config.Configuration import set_page_config
@@ -38,7 +39,7 @@ with tabs[0]:
         st.write("This dataset contains information on default payments, demographic factors, credit data, history of payment, and bill statements of credit card clients in Taiwan from April 2005 to September 2005.")
         st.caption("**Source**: UCI Machine Learning Repository")
 
-        with st.expander("Learn more about the dataset"):
+        with st.expander("**Learn more about the dataset**"):
             st.subheader("Dataset Content")
             st.write("There are 25 variables in this dataset:")
             st.markdown("""
@@ -94,7 +95,7 @@ with tabs[1]:
     st.subheader("Exploratory Data Analysis")
     st.write("This is where you will explore the data.")
 
-    with st.expander("Why is Exploratory Data Analysis (EDA) Important in ML?"):
+    with st.expander("**Why is Exploratory Data Analysis (EDA) Important in ML?**"):
 
         st.markdown("""
         **1. Data Quality Check**
@@ -268,59 +269,148 @@ with tabs[2]:
             # Display content using Streamlit markdown
             st.markdown(markdown_text)
 
-        penalty = st.selectbox("**Penalty**", ["l1", "l2", "elasticnet", "none"])
+        penalty = st.selectbox("**Penalty**", ["l1", "l2", "none"])
         C = st.slider("**Inverse Regularization Strength**", min_value=0.01, max_value=10.0, value=1.0, step=0.01)
         solver = st.selectbox("**Solver**", ["newton-cg", "lbfgs", "liblinear", "sag", "saga"])
         max_iter = st.number_input("**Max Iterations**", min_value=100, max_value=1000, value=200, step=100)
-        class_weight = st.selectbox("**Class Weight**", ["balanced", "none"])
+        class_weight = st.selectbox("**Class Weight**", ["balanced", None])
 
         test_size = st.slider("**Test Size**", min_value=0.1, max_value=0.5, value=0.2, step=0.01)
         random_state = st.number_input("**Random State**", min_value=0, max_value=100, value=42, step=1)
 
         if st.button("Train Model", use_container_width=True):
-            with st.status("Training... Please wait"):
+            with st.status("Training... Please wait", expanded=True):
                 file_path = processed_paths[selected_dataset]
                 target_column = target_columns[selected_dataset]
                 try:
-                    accuracy, confusion, report = LogisticRegression.run_logistic_regression_pipeline(
+                    accuracy, confusion, report, fig, roc_fig, feature_importance_fig = LogisticRegression.run_logistic_regression_pipeline(
                         file_path, target_column, test_size, random_state, solver, C, penalty, class_weight
                     )
                     st.success("Model trained successfully!")
+
+                    st.markdown("### Model Evaluation Report")
+                    st.write(f"**Accuracy**: {accuracy:.2f}")
+                    st.write("**Confusion Matrix**:")
+                    st.write(confusion)
+                    st.write("**Classification Report**:")
+                    st.dataframe(report)
                 except Exception as e:
                     st.error(f"Error: {e}")
                     st.warning("Please check the parameters and try again.")
                 
-                
+            st.info("Interpreting model performance metrics is essential for understanding how well your classification model is performing. Let’s break down key metrics in the next section.")    
 
 with tabs[3]:
     st.subheader("Model Evaluation")
-    st.write("This is where you will evaluate the model.")
+    st.write("This is where you will evaluate the trained model.")
 
-    if st.button("Evaluate Model"):
-        st.success("Model evaluated successfully!")
+    with st.expander("**How to Interpret Metrics**"):
+        content = """
+        **🔹 Accuracy**
+        **Formula**: Accuracy = Correct Predictions / Total Predictions
 
-    with st.expander("View Evaluation Metrics"):
-        st.write("Evaluation metrics will be displayed here.")
+        **Interpretation**:
+        - High accuracy means mostly correct predictions.
+        - Low accuracy suggests underfitting or class imbalance.
+        - Accuracy alone may not be reliable for imbalanced datasets.
+
+        **🔹 Confusion Matrix**
+        **Actual vs. Predicted classifications**:
+
+        True Negative (TN) | False Positive (FP)
+        -------------------|------------------
+        False Negative (FN) | True Positive (TP)
+
+        **Interpretation**:
+        - TP: Correctly predicted positives.
+        - TN: Correctly predicted negatives.
+        - FP: Incorrectly classified negatives (Type I Error).
+        - FN: Incorrectly classified positives (Type II Error).
+
+        **🔹 Precision**
+        **Formula**: Precision = TP / (TP + FP)
+
+        - Measures correctly predicted positives.
+        - High precision means fewer false positives.
+        - Important for fraud detection.
+
+        **🔹 Recall (Sensitivity)**
+        **Formula**: Recall = TP / (TP + FN)
+
+        - Measures correctly identified actual positives.
+        - High recall means fewer false negatives.
+        - Critical for medical tests.
+
+        **🔹 F1-score**
+        **Formula**: F1 = 2 * (Precision * Recall) / (Precision + Recall)
+
+        - Balances precision and recall.
+        - Useful for imbalanced datasets.
+        - Higher F1-score indicates better model performance.
+
+        **🔹 Support**
+        - Represents the number of occurrences of each class in the dataset.
+
+        **🎯 Key Takeaways**:
+        - If accuracy is high but precision/recall are poor, consider:
+        - Rebalancing dataset.
+        - Adjusting decision thresholds.
+        - Using alternative metrics like AUC-ROC.
+        """
+
+        # Display content using Streamlit write
+        st.write(content)
     
+    st.markdown("**Model Performance Metrics**")
+    try:
+        metrics = {
+            "Accuracy": accuracy,
+            "Precision": report.loc["1", "precision"],
+            "Recall": report.loc["1", "recall"],
+            "F1 Score": report.loc["1", "f1-score"],
+            "Support": report.loc["1", "support"]
+        }
+    except NameError:
+        metrics = {
+            "Accuracy": 0.0,
+            "Precision": 0.0,
+            "Recall": 0.0,
+            "F1 Score": 0.0,
+            "Support": 0.0
+        }
+    metrics_df = pd.DataFrame(metrics, index=[0])
+    st.dataframe(metrics_df)
 
-    col1, col2 = st.columns(2)
-    with col1:
-        st.markdown("### Confusion Matrix")
-        #st.image("path_to_confusion_matrix.png", caption="Confusion Matrix")
-    with col2:
-        st.markdown("### ROC Curve")
-        #st.image("path_to_roc_curve.png", caption="ROC Curve")
-    
-    st.markdown("### Model Performance Metrics")
-    metrics = {
-        "Accuracy": 0.95,
-        "Precision": 0.92,
-        "Recall": 0.90,
-        "F1 Score": 0.91
-    }
-    for metric, value in metrics.items():
-        st.write(f"{metric}: {value}")
+    col1, col2, col3 = st.columns(3)
+    try:
+        with col1:
+            st.markdown("**Confusion Matrix**")
+            st.pyplot(fig, use_container_width=True)
+            st.caption("The confusion matrix shows the counts of true positives, true negatives, false positives, and false negatives for the model's predictions.")
+        with col2:
+            st.markdown("**ROC Curve**")
+            st.pyplot(roc_fig, use_container_width=True)
+            st.caption("The ROC curve shows the trade-off between true positive rate and false positive rate at various thresholds.")
+        with col3:
+            st.markdown("**Feature Importance**")
+            st.pyplot(feature_importance_fig, use_container_width=True)
+            st.caption("Feature importance indicates the contribution of each feature to the model's predictions.")
+    except NameError:
+        st.warning("Graphs are not available. Please ensure the model is trained successfully.")
+        import matplotlib.pyplot as plt
+        fig, ax = plt.subplots()
+        ax.text(0.5, 0.5, 'Placeholder Graph', horizontalalignment='center', verticalalignment='center', fontsize=12)
+        with col1:
+            st.markdown("**Confusion Matrix**")
+            st.pyplot(fig, use_container_width=True)
+        with col2:
+            st.markdown("**ROC Curve**")
+            st.pyplot(fig, use_container_width=True)
+        with col3:
+            st.markdown("**Feature Importance**")
+            st.pyplot(fig, use_container_width=True)
 
+    st.info("**Note**: This is not it. We can further improve the model's performance by tuning hyperparameters, using ensemble methods, or trying different algorithms. Lets explore the parameter tuning in the next section.")
 with tabs[4]:
     st.subheader("Model Insights & Tuning Tips")
     st.write("This is where you will provide insights and tuning tips for the model.")
