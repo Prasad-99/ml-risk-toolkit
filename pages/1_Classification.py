@@ -3,6 +3,8 @@ import numpy as np
 import matplotlib.pyplot as plt
 import seaborn as sns
 from graphviz import Digraph
+from sklearn.calibration import LabelEncoder
+from sklearn.tree import DecisionTreeClassifier, export_graphviz
 import streamlit as st
 import time
 from utils.config.Configuration import set_page_config
@@ -83,7 +85,7 @@ with tabs[1]:
 
     st.dataframe({"Feature": ["age", "income", "loan_amount", "education", "marital_status", "employment_type", "credit_score", "default"],
                     "Type": ["Numerical", "Numerical", "Numerical", "Categorical", "Categorical", "Categorical", "Numerical", "Binary"],
-                    "Description": ["Age of the client", "Monthly Income of the client", "Outstanding Loan amount", "HighSchool, Graduate, PostGraduate", "Single, Married, Divorced", "Salaried, Self-Employed, Unemloyed", "Credit score(350-850)", "Target variable (1=default, 0=no default)"]})
+                    "Description": ["Age of the client", "Monthly Income of the client", "Outstanding Loan amount", "HighSchool, Graduate, PostGraduate", "Single, Married, Divorced", "Salaried, Self-Employed, Unemloyed", "Credit score(350-850)", "Target variable (1=default, 0=no default)"]}, use_container_width=True)
 
     explore_data = st.button("View Data", use_container_width=True)
     
@@ -93,13 +95,154 @@ with tabs[1]:
         file_path = raw_path
         raw_data, data_description = eda.explore_data(file_path)
         st.caption("Raw Data")
-        st.dataframe(raw_data)
+        st.dataframe(raw_data, use_container_width=True)
         st.caption("Data Description")
-        st.dataframe(data_description)
+        st.dataframe(data_description, use_container_width=True)
         st.info("**Note**: The Data looks messy and unstructured. We will need to perform Exploratory Data Analysis (EDA) to clean and preprocess it before training the model.")
 
 with tabs[2]:
-    pass
+    st.markdown("### 🧪 Impurities in Synthetic Credit Default Dataset")
+
+    # Data for the table
+    data = {
+        "🔍 Impurity Type": [
+            "❌ Missing Values",
+            "🎲 Skewed Distribution",
+            "🤯 Outliers",
+            "🔁 Multicollinearity",
+            "📛 Categorical Typos & Imbalance",
+            "⚖️ Imbalanced Target",
+            "🔊 Noise"
+        ],
+        "🧩 Column(s)": [
+            "income, loan_amount, employment_type",
+            "income, credit_score",
+            "age",
+            "income, income_2",
+            "marital_status",
+            "default",
+            "loan_amount"
+        ],
+        "📖 Explanation": [
+            "Some rows contain NaN to simulate incomplete real-world records",
+            "Income and credit score distributions are heavily right-skewed",
+            "Included values like -5 or 150 to simulate data entry errors",
+            "income_2 is a linear function of income with noise",
+            "Used values like 'Singl', 'Marrid', 'married', 'DIVORCED' in mixed case",
+            "Made 90% of the values 0, and only 10% as 1 (defaults are rare)",
+            "Added Gaussian noise to loan amount values"
+        ],
+        "🎯 Purpose": [
+            "Test imputation or row dropping strategies",
+            "Demonstrate normalization/log scaling",
+            "Test outlier detection (IQR, Z-score)",
+            "Show impact of correlated features",
+            "Demonstrate cleaning + label encoding",
+            "Handle class imbalance using SMOTE/weights",
+            "Test model robustness against noise"
+        ]
+    }
+
+    # Create DataFrame
+    df = pd.DataFrame(data)
+
+    # Display DataFrame
+    st.markdown("### 📋 Impurity Summary Table")
+    st.dataframe(df, use_container_width=True)
+
+    # For consistent plot style
+    sns.set(style="whitegrid")
+
+    @st.cache_data
+    def load_data():
+        return pd.DataFrame({
+            'age': [25, 45, -5, 50, 150, 40, 60, 30],
+            'income': [40000, 80000, np.nan, 100000, 35000, 75000, 1e7, 'fifty-thousand'],
+            'loan_amount': [2000, 10000, 5000, None, 1500, -5000, 15000, 4000],
+            'employment_type': ['Salaried', np.nan, 'Self-employed', 'Salaried', 'Other', 'Salaried', np.nan, 'Self-employed'],
+            'marital_status': ['Single', 'Marrid', 'Singl', 'DIVORCED', 'married', 'single', 'Yes', 'NO'],
+            'default': [0, 1, 0, 1, 0, 0, 1, 0],
+            'income_2': [44000, 82000, np.nan, 101000, 36000, 76000, 10000000, 51000],
+            'credit_score': [300, 600, 750, 800, 400, 700, 900, 550]
+        })
+
+    df = load_data()
+
+    st.subheader("🔍 Raw Data Snapshot")
+    st.dataframe(df)
+
+    # Step 1: Missing Values
+    if st.checkbox("❌ Fill Missing Values"):
+        df['income'] = pd.to_numeric(df['income'], errors='coerce')
+        df['income'].fillna(df['income'].median(), inplace=True)
+        df['loan_amount'].fillna(df['loan_amount'].median(), inplace=True)
+        df['employment_type'].fillna("Unknown", inplace=True)
+        st.success("✅ Missing values filled.")
+
+    # Step 2: Fix Types
+    if st.checkbox("🔁 Convert and Sanitize Data Types"):
+        df['age'] = pd.to_numeric(df['age'], errors='coerce')
+        df['income'] = pd.to_numeric(df['income'], errors='coerce')
+        df['income'].fillna(df['income'].median(), inplace=True)
+        st.success("✅ Data types fixed.")
+
+    # Step 3: Categorical Cleanup
+    if st.checkbox("📛 Normalize Categorical Typos"):
+        df['marital_status'] = df['marital_status'].str.lower().map({
+            'single': 'single', 'singl': 'single', 'marrid': 'married',
+            'married': 'married', 'divorced': 'divorced', 'yes': 'married', 'no': 'single'
+        })
+        st.success("✅ Cleaned marital status.")
+
+    # Step 4: Outlier Handling + Plot
+    if st.checkbox("🤯 Clip Outliers in Age"):
+        fig, ax = plt.subplots(1, 2, figsize=(12, 4))
+        sns.boxplot(y=df['age'], ax=ax[0]).set_title("Before Clipping")
+
+        q1, q3 = df['age'].quantile([0.25, 0.75])
+        iqr = q3 - q1
+        lower, upper = q1 - 1.5 * iqr, q3 + 1.5 * iqr
+        df['age'] = df['age'].clip(lower, upper)
+
+        sns.boxplot(y=df['age'], ax=ax[1]).set_title("After Clipping")
+        st.pyplot(fig)
+
+    # Step 5: Normalize Skewed Income + Plot
+    if st.checkbox("🎲 Apply Log Transform to Income"):
+        df['income_log'] = np.log1p(df['income'])
+
+        fig, ax = plt.subplots(1, 2, figsize=(12, 4))
+        sns.histplot(df['income'], bins=20, ax=ax[0], kde=True).set_title("Original Income")
+        sns.histplot(df['income_log'], bins=20, ax=ax[1], kde=True).set_title("Log-Transformed Income")
+        st.pyplot(fig)
+
+    # Step 6: Drop Multicollinearity Column
+    if st.checkbox("🔁 Drop Correlated Column (income_2)"):
+        df.drop(columns=['income_2'], inplace=True)
+        st.success("✅ Dropped income_2")
+
+    # Step 7: Encode Categorical Columns
+    if st.checkbox("🔤 Label Encode Categorical Features"):
+        le = LabelEncoder()
+        for col in ['employment_type', 'marital_status']:
+            df[col] = le.fit_transform(df[col].astype(str))
+        st.success("✅ Label encoded.")
+        st.dataframe(df)
+
+    # Step 8: Class Imbalance Check
+    if st.checkbox("⚖️ Show Class Imbalance (Target Variable)"):
+        st.subheader("Class Distribution")
+        st.bar_chart(df['default'].value_counts())
+
+    # Step 9: Final Cleanup
+    if st.checkbox("🧽 Drop Duplicates and Reset Index"):
+        df.drop_duplicates(inplace=True)
+        df.reset_index(drop=True, inplace=True)
+        st.success("✅ Final cleanup done.")
+        st.dataframe(df)
+
+    st.markdown("---")
+    st.success("🎉 Data cleaning and visualization completed!")
 
 with tabs[3]:
 
@@ -350,11 +493,12 @@ with tabs[4]:
         st.markdown("---")
 
         st.markdown("### Step 1: Linear Combination")
-        st.markdown(r"""
+        st.info("""
         **What:** Combine input feature and weight linearly to compute score $z$.
+                
         **Why:** It generates the base value before transforming into probability.
         """)
-        st.markdown(r'**How:** $z = w \cdot x + b$')
+        st.latex(r"\quad z = w \cdot x + b")
 
         st.latex(rf''' z = {w_val:.2f} \times {x_val:.2f} + {b_val:.2f} = {z:.2f} ''')
 
@@ -371,11 +515,10 @@ with tabs[4]:
         st.markdown("---")
 
         st.markdown("### Step 2: Sigmoid Function")
-        st.markdown(r"""
+        st.info("""
         **What:** Transform raw score $z$ into a probability.
         **Why:** Logistic regression predicts the probability of class 1.
-                    """)
-        st.markdown("**How:**") 
+            """)
         st.latex(r''' \sigma(z) = \frac{1}{1 + e^{-z}} ''')
 
         def sigmoid(z):
@@ -399,11 +542,11 @@ with tabs[4]:
         st.markdown("---")
 
         st.markdown("### Step 3: Loss Function (Binary Cross-Entropy)")
-        st.markdown(r"""
+        st.info("""
         **What:** Evaluate how wrong the predicted probability is.
+                
         **Why:** The loss function guides the learning by penalizing wrong predictions.
         """)
-        st.markdown("**How:**")
         st.latex(r'''\mathcal{L} = - \left[ y \log(\hat{y}) + (1 - y) \log(1 - \hat{y}) \right]''')
     
         loss = - (actual_y * np.log(sig_val + 1e-8) + (1 - actual_y) * np.log(1 - sig_val + 1e-8))
@@ -412,11 +555,11 @@ with tabs[4]:
         st.markdown("---")
 
         st.markdown("### Step 4: Gradient Descent Update")
-        st.markdown(r"""
+        st.info("""
         **What:** Improve model by adjusting weights and bias.
+                
         **Why:** Minimize the loss by learning from the error.
-                    """)
-        st.markdown("**How:**")
+            """)
         st.latex(r'''
             \begin{aligned}
             w &:= w - \alpha (\hat{y} - y) x \\
@@ -436,11 +579,12 @@ with tabs[4]:
         st.markdown("---")
 
         st.markdown("### Step 5: What’s Next?")
-        st.markdown(r"""
+        st.info("""
         **What:** Use updated weights and bias in the next forward pass.  
         **Why:** Gradient descent is an iterative optimization process.  
         **How:** Replace old `w` and `b` with updated values and repeat Steps 1–4.
-
+        """)
+        st.markdown("""
         **When to Stop:**  
         - When loss change is below a small threshold (e.g., 0.00001)  
         - Or after a maximum number of epochs  
@@ -452,8 +596,10 @@ with tabs[4]:
         st.markdown("---")
 
         st.markdown("### Step 6: Final Prediction")
-        st.markdown(r"""
-        **What:** Use the trained model to make predictions on new data.  
+        st.info(r"""
+        **What:** Use the trained model to make predictions on new data.
+                """)
+        st.markdown(""" 
         **How:**  
         - Multiply input features by learned weights  
         - Apply the sigmoid function  
@@ -471,225 +617,232 @@ with tabs[4]:
         """)
 
         # Sample dataset
-        st.markdown("### 🧪 Sample Data")
-        feature_values = st.text_input("Enter feature values (comma-separated)", "2, 3, 10, 19, 21, 22")
-        labels = st.text_input("Enter corresponding labels (comma-separated)", "0, 0, 0, 1, 1, 1")
+        data = {
+            "Weather": ["Sunny", "Sunny", "Overcast", "Rainy", "Rainy",
+                        "Rainy", "Overcast", "Sunny", "Sunny", "Rainy"],
+            "Play Tennis": ["No", "No", "Yes", "Yes", "Yes", "No", "Yes", "Yes", "Yes", "Yes"]
+        }
 
-        try:
-            feature_list = list(map(float, feature_values.split(',')))
-            label_list = list(map(int, labels.split(',')))
-            data = pd.DataFrame({'Feature': feature_list, 'Label': label_list})
-            st.dataframe(data)
-        except:
-            st.error("Please enter valid comma-separated numbers for both features and labels.")
-            st.stop()
+        df = pd.DataFrame(data)
 
-        st.markdown("### 🧠 Split Criteria Explanation")
+        # Streamlit app layout
+        st.markdown("### 🎾 Tennis Dataset - Weather vs Play Decision")
+        st.markdown("This is the dataset we'll use to understand how a **Decision Tree Classifier** works.")
 
-        st.markdown("**Gini Index**")
-        st.latex(r"Gini = 1 - (p_0^2 + p_1^2)")
-        st.markdown("""
-        It measures impurity. A lower Gini value means the node is more pure. A perfectly pure node (all examples same class) has Gini = 0.
-        """)
+        st.markdown("### 📄 Sample Dataset")
+        st.dataframe(df, use_container_width=True)
 
-        st.markdown("**Entropy**")
-        st.latex(r"Entropy = - \sum p_i \log_2(p_i)")
-        st.markdown("""
-        Entropy measures information gain. Higher entropy means more uncertainty. A perfect split will reduce entropy the most.
-        """)
+        # Title
+        st.markdown("### 🎾 Step 1: Class Distribution & Root Node Impurity")
 
-        st.markdown("**Why use them?**")
-        st.markdown("""
-        To decide how to split nodes, we need a way to measure how good a split is. Both Gini and Entropy quantify this.
-        """)
+        # Explanation
+        st.info("""
+        **What:**  
+        We are calculating how "impure" or "mixed" our target values are before making any split.
 
-        st.markdown("**How are they used?**")
-        st.markdown("""
-        At each node, all possible splits are evaluated using the chosen metric. The split with the best score is chosen (lowest Gini or highest info gain).
-        """)
+        **Why:**  
+        This impurity tells us how useful a split will be. The goal of a decision tree is to reduce this impurity by splitting the dataset.
 
-        # Add visual comparison of Gini vs Entropy
-        st.markdown("### 📊 Visual Comparison: Gini vs Entropy")
-        p_vals = np.linspace(0.001, 1, 100)
-        gini_vals = [1 - (p**2 + (1 - p)**2) for p in p_vals]
-        entropy_vals = [-p*np.log2(p) - (1 - p)*np.log2(1 - p) for p in p_vals]
+        **How:**  
+        We use either: Gini Index or Entropy to measure impurity.
+                """)
+        st.latex(r"Gini = 1 - p_{yes}^2 - p_{no}^2")
+        st.latex(r"Entropy = -p_{yes} \log_2(p_{yes}) - p_{no} \log_2(p_{no})")
 
-        fig, ax = plt.subplots()
-        ax.plot(p_vals, gini_vals, label='Gini Index')
-        ax.plot(p_vals, entropy_vals, label='Entropy')
-        ax.set_xlabel("Probability of Class 1")
-        ax.set_ylabel("Impurity / Information")
-        ax.set_title("Gini vs Entropy")
-        ax.legend()
-
-        st.pyplot(fig)
-
-        metric = st.selectbox("**Select split criterion**", ["Gini Index", "Entropy"])
-        max_depth = st.slider("Max depth of tree", min_value=1, max_value=5, value=2)
-
-        # Gini and Entropy calculation functions
-        def gini(groups):
-            gini_score = 0.0
-            total = sum(len(g) for g in groups)
-            for group in groups:
-                size = len(group)
-                if size == 0:
-                    continue
-                score = 0
-                for class_val in [0, 1]:
-                    proportion = sum(group['Label'] == class_val) / size
-                    score += proportion ** 2
-                gini_score += (1 - score) * (size / total)
-            return gini_score
-
-        def entropy(groups):
-            entropy_score = 0.0
-            total = sum(len(g) for g in groups)
-            for group in groups:
-                size = len(group)
-                if size == 0:
-                    continue
-                group_entropy = 0.0
-                for class_val in [0, 1]:
-                    proportion = sum(group['Label'] == class_val) / size
-                    if proportion > 0:
-                        group_entropy -= proportion * np.log2(proportion)
-                entropy_score += group_entropy * (size / total)
-            return entropy_score
-
-        # --------------------------------------------
-        # Root node calculation and explanation
-        # --------------------------------------------
-        st.markdown("### 🪴 Step: Calculating the Root Node Split")
-        st.markdown("""
-        We now compute the impurity or entropy for all possible split points based on the input data and selected metric.
-        The split that minimizes impurity (or maximizes information gain) is chosen as the root.
-        """)
-
-        sorted_vals = sorted(data['Feature'])
-        candidate_splits = [(sorted_vals[i] + sorted_vals[i+1])/2 for i in range(len(sorted_vals)-1)]
-
-        best_split = None
-        best_score = float('inf')
-        st.markdown("#### Candidate Splits and Scores:")
-
-        for split in candidate_splits:
-            left = data[data['Feature'] <= split]
-            right = data[data['Feature'] > split]
-            score = gini([left, right]) if metric == "Gini Index" else entropy([left, right])
-            st.write(f"Split at x <= {split:.1f} → {metric} = {score:.4f}")
-            if score < best_score:
-                best_score = score
-                best_split = split
-
-        st.markdown(f"**✅ Best Split (Root Node): x <= {best_split:.1f}, {metric} = {best_score:.4f}**")
-
-        # --------------------------------------------
-        # Root split theory explanation
-        # --------------------------------------------
-        st.markdown("### 📘 How Root Node is Chosen")
-        st.markdown("""
-        To begin building the tree, we must decide the root node—the first split.
-        This is done by evaluating **all possible split points** on the feature using the chosen metric (Gini or Entropy).
-        The split that produces the **lowest impurity (Gini)** or **highest information gain (Entropy)** is chosen.
-        """)
-        st.markdown("**Steps to Determine Root Node:**")
-        st.markdown("""
-        1. Sort the values of the feature.
-        2. Generate split points between adjacent values.
-        3. For each split, divide the data into left/right groups.
-        4. Compute the impurity (Gini or Entropy) of the split.
-        5. Choose the split with the best score.
-
-        This selected split becomes the root of the decision tree.
-        """)
-        st.latex(r"\text{Best Split} = \arg\min_{s \in S} \; \text{Impurity}(s)")
-
-        # --------------------------------------------
-        # Gini and Entropy explanation
-        # --------------------------------------------
-        st.markdown("### 🧮 Gini Index & Entropy: How They're Calculated")
-
-        st.markdown("#### Gini Index Calculation Steps")
-        st.markdown("""
-        For each split:
-        1. Divide the dataset into left and right groups based on a condition.
-        2. For each group, compute the proportion of each class.
-        3. Apply the Gini formula for each group: \( 1 - p_0^2 - p_1^2 \)
-        4. Compute weighted average of the groups by their sizes.
-
-        Lower Gini indicates purer splits.
-        """)
-        st.latex(r"Gini = \sum_{groups} (1 - \sum_{classes} p_j^2) \cdot \frac{n_j}{n}")
-
-        st.markdown("#### Entropy Calculation Steps")
-        st.markdown("""
-        For each split:
-        1. Divide the dataset into left and right groups.
-        2. For each group, compute the proportion of each class.
-        3. Apply the entropy formula: \( - \sum p_i \log_2(p_i) \)
-        4. Compute weighted average of the groups by their sizes.
-
-        Lower entropy also indicates better splits, but it’s more sensitive than Gini.
-        """)
-        st.latex(r"Entropy = \sum_{groups} \left[ - \sum_{classes} p_j \log_2(p_j) \right] \cdot \frac{n_j}{n}")
-
-        # Recursive split function with dynamic criterion
-        def build_tree(df, depth=0, max_depth=2, criterion="Gini Index"):
-            sorted_vals = sorted(df['Feature'])
-            candidate_splits = [(sorted_vals[i] + sorted_vals[i+1])/2 for i in range(len(sorted_vals)-1)]
-            best_split = None
-            best_score = float('inf')
-            best_groups = None
-
-            for split in candidate_splits:
-                left = df[df['Feature'] <= split]
-                right = df[df['Feature'] > split]
-                score = gini([left, right]) if criterion == "Gini Index" else entropy([left, right])
-                if score < best_score:
-                    best_score = score
-                    best_split = split
-                    best_groups = (left, right)
-
-            if best_split is None or depth == max_depth:
-                majority = df['Label'].mode()[0]
-                return f"Leaf: Predict {majority}"
-
-            left_tree = build_tree(best_groups[0], depth+1, max_depth, criterion)
-            right_tree = build_tree(best_groups[1], depth+1, max_depth, criterion)
-
-            return (f"x <= {best_split:.1f}", left_tree, right_tree)
-
-        # Draw decision tree as Graphviz
-
-        def visualize_tree(node, graph=None, parent=None, counter=[0]):
-            if graph is None:
-                graph = Digraph()
-
-            node_id = str(counter[0])
-            counter[0] += 1
-
-            if isinstance(node, str):
-                graph.node(node_id, node, shape='box', style='filled', fillcolor='lightblue')
-            else:
-                graph.node(node_id, node[0], shape='ellipse')
-                left_id = visualize_tree(node[1], graph, node_id, counter)
-                right_id = visualize_tree(node[2], graph, node_id, counter)
-                graph.edge(node_id, left_id, label='Yes')
-                graph.edge(node_id, right_id, label='No')
-
-            return node_id
-
-        # Build and visualize tree
         st.markdown("---")
-        st.markdown(f"### 🌿 Full Recursive Tree ({metric}, Max Depth = {max_depth})")
-        tree_structure = build_tree(data, max_depth=max_depth, criterion=metric)
-        graph = Digraph()
-        visualize_tree(tree_structure, graph)
-        st.graphviz_chart(graph)
 
-        st.success("✅ You've now seen how a decision tree recursively splits data and builds a tree structure!")
+        # Dropdown to select criterion
+        st.session_state.criterion = st.selectbox("**🔧 Choose Split Criterion**", ["gini", "entropy"])
 
+        # Calculate class counts
+        st.session_state.yes_count = df["Play Tennis"].value_counts().get("Yes", 0)
+        st.session_state.no_count = df["Play Tennis"].value_counts().get("No", 0)
+        st.session_state.total = st.session_state.yes_count + st.session_state.no_count
+
+        # Probabilities
+        st.session_state.p_yes = st.session_state.yes_count / st.session_state.total
+        st.session_state.p_no = st.session_state.no_count / st.session_state.total
+
+        # Display class distribution
+        st.markdown("#### 📊 Class Distribution")
+        st.write(f"✔️ Yes: {st.session_state.yes_count}, ❌ No: {st.session_state.no_count} (Total: {st.session_state.total})")
+        st.latex(r"p_{yes} = \frac{%d}{%d} = %.2f \quad p_{no} = \frac{%d}{%d} = %.2f"
+                % (st.session_state.yes_count, st.session_state.total, st.session_state.p_yes, st.session_state.no_count, st.session_state.total, st.session_state.p_no))
+
+        # Compute impurity
+        if st.session_state.criterion == "gini":
+            impurity = 1 - st.session_state.p_yes**2 - st.session_state.p_no**2
+            st.markdown("#### 🔢 Gini Index at Root Node")
+            st.latex(r"Gini = 1 - p_{yes}^2 - p_{no}^2")
+            st.latex(r"= 1 - %.2f - %.2f = %.3f" % (st.session_state.p_yes**2, st.session_state.p_no**2, impurity))
+        else:
+            entropy = 0
+            if st.session_state.p_yes > 0:
+                entropy -= st.session_state.p_yes * np.log2(st.session_state.p_yes)
+            if st.session_state.p_no > 0:
+                entropy -= st.session_state.p_no * np.log2(st.session_state.p_no)
+            impurity = entropy
+            st.markdown("#### 🔢 Entropy at Root Node")
+            st.latex(r"Entropy = -p_{yes} \log_2(p_{yes}) - p_{no} \log_2(p_{no})")
+            st.latex(r"= -%.2f \log_2(%.2f) - %.2f \log_2(%.2f) = %.3f" % (st.session_state.p_yes, st.session_state.p_yes, st.session_state.p_no, st.session_state.p_no, entropy))
+        
+        st.session_state.root_impurity = round(impurity, 3)
+
+        st.markdown("---")
+
+        st.markdown("### 🌤️ Step 2: Splitting Based on 'Weather' Feature")
+
+        # Explanation
+        st.info("""
+        **What:**  
+        We'll evaluate each group within the 'Weather' feature (Sunny, Overcast, Rainy).
+
+        **Why:**  
+        To determine how much each split reduces impurity in the dataset.
+
+        **How:**  
+        For each subset:
+        - Calculate the proportion of Yes/No
+        - Compute Gini or Entropy
+        - Weight each subset's impurity by its size
+        - Add them for overall split impurity
+        """)
+
+        # Total size
+        total = len(df)
+
+        # Group by Weather
+        split_data = []
+        for weather_type in df["Weather"].unique():
+            subset = df[df["Weather"] == weather_type]
+            yes = sum(subset["Play Tennis"] == "Yes")
+            no = sum(subset["Play Tennis"] == "No")
+            subset_total = yes + no
+            p_yes = yes / subset_total if subset_total else 0
+            p_no = no / subset_total if subset_total else 0
+
+            # Calculate impurity
+            if st.session_state.criterion == "gini":
+                impurity = 1 - p_yes**2 - p_no**2
+            else:
+                impurity = 0
+                if p_yes > 0:
+                    impurity -= p_yes * np.log2(p_yes)
+                if p_no > 0:
+                    impurity -= p_no * np.log2(p_no)
+
+            weight = subset_total / total
+            weighted_impurity = weight * impurity
+
+            split_data.append({
+                "Weather": weather_type,
+                "Total": subset_total,
+                "Yes": yes,
+                "No": no,
+                "Impurity": round(impurity, 3),
+                "Weighted Impurity": round(weighted_impurity, 3)
+            })
+
+        # Show results in a table
+        split_df = pd.DataFrame(split_data)
+        st.markdown("### 📊 Impurity of Each Weather Subset")
+        st.dataframe(split_df, use_container_width=True, column_config={"Total": st.column_config.TextColumn(width="small"),
+                                                                    "Yes": st.column_config.TextColumn(width="small"),
+                                                                    "No": st.column_config.TextColumn(width="small"),
+                                                                    "Impurity": st.column_config.TextColumn(width="small"),
+                                                                    "Weighted Impurity": st.column_config.TextColumn(width="medium")})
+
+        # Show weighted total
+        st.session_state.split_impurity = round(split_df["Weighted Impurity"].sum(), 3)
+        st.markdown("**🧮 Total Weighted Impurity After Weather Split**")
+        if st.session_state.criterion == "gini":
+            st.latex(fr"Gini_{{split}} = {st.session_state.split_impurity}")
+        else:
+            st.latex(fr"Entropy_{{split}} = {st.session_state.split_impurity}")
+
+        st.markdown("---")
+
+        st.markdown("### ✅ Step 3: Evaluate 'Weather' Split Using Gain")
+
+        st.info("""
+        **What:**  
+        Gain measures how much impurity is reduced by the split.
+
+        **Why:**  
+        Higher gain indicates a better split, leading to more accurate predictions.
+                """)
+
+        # Step 3: Gain calculation
+        st.session_state.gain = st.session_state.root_impurity - st.session_state.split_impurity
+
+        st.markdown("### 🧮 Gain Calculation")
+        if st.session_state.criterion == "gini":
+            st.latex(fr"Gini_{{gain}} = Gini_{{root}} - Gini_{{split}}")
+            st.latex(fr"Gain = {st.session_state.root_impurity:.3f} - {st.session_state.split_impurity:.3f} = {st.session_state.gain:.3f}")
+        else:
+            st.latex(fr"Info\ Gain = Entropy_{{root}} - Entropy_{{split}}")
+            st.latex(fr"Gain = {st.session_state.root_impurity:.3f} - {st.session_state.split_impurity:.3f} = {st.session_state.gain:.3f}")
+
+        st.success(f"🎯 The gain from splitting on 'Weather' is **{st.session_state.gain:.3f}**. Higher gain means better split!")
+
+        st.markdown("---")
+
+        st.markdown("### 📈 Step 4: Visualize the Decision Tree Using 'Weather' as Feature")
+        
+        # Encode categorical features
+        le_weather = LabelEncoder()
+        le_label = LabelEncoder()
+        df["Weather_Encoded"] = le_weather.fit_transform(df["Weather"])
+        df["Play_Encoded"] = le_label.fit_transform(df["Play Tennis"])
+
+        max_depth = st.slider("**Max Depth**", min_value=1, max_value=2, value=1, step=1)
+
+        # Train model
+        X = df[["Weather_Encoded"]]
+        y = df["Play_Encoded"]
+        model = DecisionTreeClassifier(criterion=st.session_state.criterion, max_depth=max_depth, random_state=42)
+        model.fit(X, y)
+
+        # Generate Graphviz DOT
+        dot_data = export_graphviz(
+            model,
+            out_file=None,
+            feature_names=["Weather"],
+            class_names=le_label.classes_,
+            filled=True,
+            rounded=True,
+            special_characters=True
+        )
+
+        # Render in Streamlit
+        st.markdown("### 🌐 Graphviz Decision Tree")
+        st.graphviz_chart(dot_data, use_container_width=True)
+
+        # Legend
+        st.markdown("### 🧾 Legend")
+        legend = {
+            "Sunny": le_weather.transform(["Sunny"])[0],
+            "Overcast": le_weather.transform(["Overcast"])[0],
+            "Rainy": le_weather.transform(["Rainy"])[0],
+            "Yes": le_label.transform(["Yes"])[0],
+            "No": le_label.transform(["No"])[0]
+        }
+        st.write("Encoded values used in the tree:")
+        st.write(legend)
+
+        # Short interpretation in Streamlit
+        st.markdown("### 🧠 Interpretation (Quick Summary)")
+        st.markdown("""
+        - The **root node** splits on the `Weather` feature based on its encoded values.
+        - Each **leaf node** shows:
+        - `samples`: Number of records
+        - `value`: Count of [No, Yes]
+        - `class`: Predicted outcome (based on majority)
+        - A **lower impurity** means more confident predictions.
+        - **Darker colors** = purer nodes (stronger class dominance).
+        """)
+
+        st.success("✅ You've walked through every step of Logistic Regression using a concrete example!")
     # model_name = st.selectbox("Select Model", models[selected_model])
 
     # st.markdown("### Model Parameters")
