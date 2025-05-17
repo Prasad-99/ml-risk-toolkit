@@ -153,96 +153,159 @@ with tabs[2]:
     # For consistent plot style
     sns.set(style="whitegrid")
 
-    @st.cache_data
-    def load_data():
-        return pd.DataFrame({
-            'age': [25, 45, -5, 50, 150, 40, 60, 30],
-            'income': [40000, 80000, np.nan, 100000, 35000, 75000, 1e7, 'fifty-thousand'],
-            'loan_amount': [2000, 10000, 5000, None, 1500, -5000, 15000, 4000],
-            'employment_type': ['Salaried', np.nan, 'Self-employed', 'Salaried', 'Other', 'Salaried', np.nan, 'Self-employed'],
-            'marital_status': ['Single', 'Marrid', 'Singl', 'DIVORCED', 'married', 'single', 'Yes', 'NO'],
-            'default': [0, 1, 0, 1, 0, 0, 1, 0],
-            'income_2': [44000, 82000, np.nan, 101000, 36000, 76000, 10000000, 51000],
-            'credit_score': [300, 600, 750, 800, 400, 700, 900, 550]
-        })
+    st.markdown("---")
 
-    df = load_data()
-
-    st.subheader("🔍 Raw Data Snapshot")
-    st.dataframe(df)
-
-    # Step 1: Missing Values
     if st.checkbox("❌ Fill Missing Values"):
-        df['income'] = pd.to_numeric(df['income'], errors='coerce')
-        df['income'].fillna(df['income'].median(), inplace=True)
-        df['loan_amount'].fillna(df['loan_amount'].median(), inplace=True)
-        df['employment_type'].fillna("Unknown", inplace=True)
-        st.success("✅ Missing values filled.")
+        # Table 1: Missing Values Summary
+        missing_summary_data = {
+            "Column": ["income", "loan_amount", "employment_status", "income_2"],
+            "Missing Count": [30, 55, 54, 30],
+            "% Missing": ["3.0%", "5.5%", "5.4%", "3.0%"]
+        }
+        missing_df = pd.DataFrame(missing_summary_data)
+
+        # Table 2: Imputation Strategy
+        strategy_data = {
+            "Column": ["income", "loan_amount", "employment_status", "income_2"],
+            "Type": ["float64", "float64", "object", "float64"],
+            "Suggested Imputation Strategy": [
+                "Median or regression-based imputation",
+                "Median or grouped median",
+                "Mode or 'Unknown'",
+                "Drop or recalculate from `income`"
+            ]
+        }
+        strategy_df = pd.DataFrame(strategy_data)
+
+        st.markdown("### 🔍 Missing Values Summary")
+        st.dataframe(missing_df, use_container_width=True)
+
+        st.markdown("### 🧾 Suggested Imputation Strategy")
+        st.dataframe(strategy_df, use_container_width=True)
+
+        st.markdown("---")
 
     # Step 2: Fix Types
-    if st.checkbox("🔁 Convert and Sanitize Data Types"):
-        df['age'] = pd.to_numeric(df['age'], errors='coerce')
-        df['income'] = pd.to_numeric(df['income'], errors='coerce')
-        df['income'].fillna(df['income'].median(), inplace=True)
-        st.success("✅ Data types fixed.")
+    if st.checkbox("🎲 Apply Log Transform to Skewed data"):
+        # Create skewness summary table
+        skew_data = {
+            "Column": ["income", "income_2", "loan_amount", "default", "age", "credit_score"],
+            "Skewness": [2.04, 2.00, 1.46, 1.38, 0.44, -0.13],
+            "Highly Skewed?": ["✅ Yes", "✅ Yes", "✅ Yes", "✅ Yes", "❌ No", "❌ No"]
+        }
+        skew_df = pd.DataFrame(skew_data)
+
+        st.markdown("### 📊 Skewness Table")
+        st.dataframe(skew_df, use_container_width=True)
+
+        st.markdown("### 🔎 Interpretation")
+        st.markdown("""
+        - All variables with skewness **> 1 or < -1** are considered **highly skewed**
+        - **`income`**, **`income_2`**, **`loan_amount`**, and **`default`** show **positive skew** (long right tail)
+        - **`age`** and **`credit_score`** appear **fairly symmetric**
+        """)
+
+        st.markdown("---")
+    
+    if st.checkbox("🔁 Check Outliers"):
+        # Outlier Summary Data
+        outlier_data = {
+            "Column": ["default", "income", "income_2", "loan_amount", "age", "credit_score"],
+            "Outlier Count": [216, 53, 53, 34, 16, 9],
+            "Percentage": [21.6, 5.3, 5.3, 3.4, 1.6, 0.9]
+        }
+        outlier_df = pd.DataFrame(outlier_data)
+
+        st.markdown("### 📊 Outlier Summary Table")
+        st.dataframe(outlier_df, use_container_width=True)
+
+        st.markdown("### 🔎 Interpretation")
+        st.markdown("""
+        - **`default`** is a binary column, so flagged entries are due to **class imbalance**, not true outliers.
+        - **`income`**, **`income_2`**, and **`loan_amount`** contain **significant outliers**, likely due to noise or extreme values.
+        - **`age`** contains some suspiciously low or high values (e.g., <18 or >100).
+        - **`credit_score`** has only **minor outliers** and appears fairly stable.
+        """)
+
+        st.markdown("---")
+    
+    if st.checkbox("🤯 Check Multicollinearity"):
+        # Multicollinearity data (manually inserted)
+        multi_data = {
+            "Feature 1": ["income"],
+            "Feature 2": ["income_2"],
+            "Correlation": [0.995]
+        }
+        multi_df = pd.DataFrame(multi_data)
+
+        st.markdown("### 📊 Highly Correlated Feature Pairs")
+        st.dataframe(multi_df, use_container_width=True)
+
+        st.markdown("### 🔎 Interpretation")
+        st.markdown("""
+        - `**income**` and `**income_2**` are **almost perfectly correlated** with a coefficient of **0.995**.
+        - This is a classic case of **multicollinearity**, where one feature is likely a noisy duplicate of another.
+        - Multicollinearity can:
+        - Inflates standard errors in models
+        - Leads to unreliable coefficient estimates
+        - Reduces model interpretability
+        - ✅ **Action**: It's advisable to **drop `income_2`** or retain only one of the two features.
+        """)
+
+        st.markdown("---")
 
     # Step 3: Categorical Cleanup
     if st.checkbox("📛 Normalize Categorical Typos"):
-        df['marital_status'] = df['marital_status'].str.lower().map({
-            'single': 'single', 'singl': 'single', 'marrid': 'married',
-            'married': 'married', 'divorced': 'divorced', 'yes': 'married', 'no': 'single'
-        })
-        st.success("✅ Cleaned marital status.")
+        # Create data for Before Standardization
+        before_data = {
+            "Marital Status": ["Married", "Single", "Divorced", "married"],
+            "Count": [403, 377, 166, 54]
+        }
+        before_df = pd.DataFrame(before_data)
 
-    # Step 4: Outlier Handling + Plot
-    if st.checkbox("🤯 Clip Outliers in Age"):
-        fig, ax = plt.subplots(1, 2, figsize=(12, 4))
-        sns.boxplot(y=df['age'], ax=ax[0]).set_title("Before Clipping")
+        # Create data for After Standardization
+        after_data = {
+            "Marital Status": ["Married", "Single", "Divorced"],
+            "Count": [457, 377, 166]
+        }
+        after_df = pd.DataFrame(after_data)
 
-        q1, q3 = df['age'].quantile([0.25, 0.75])
-        iqr = q3 - q1
-        lower, upper = q1 - 1.5 * iqr, q3 + 1.5 * iqr
-        df['age'] = df['age'].clip(lower, upper)
+        col1, col2 = st.columns(2)
 
-        sns.boxplot(y=df['age'], ax=ax[1]).set_title("After Clipping")
-        st.pyplot(fig)
+        with col2:
+            st.subheader("✅ After Standardization")
+            st.dataframe(after_df, use_container_width=True)
+
+        with col1:
+            st.subheader("🔍 Before Standardization")
+            st.dataframe(before_df, use_container_width=True)
 
     # Step 5: Normalize Skewed Income + Plot
-    if st.checkbox("🎲 Apply Log Transform to Income"):
-        df['income_log'] = np.log1p(df['income'])
+    if st.checkbox("🎲 Class Imbalance (Target Variable)"):
+        # Target variable imbalance data
+        imbalance_data = {
+            "Class": [0, 1],
+            "Count": [784, 216],
+            "Percentage": [78.4, 21.6]
+        }
+        imbalance_df = pd.DataFrame(imbalance_data)
 
-        fig, ax = plt.subplots(1, 2, figsize=(12, 4))
-        sns.histplot(df['income'], bins=20, ax=ax[0], kde=True).set_title("Original Income")
-        sns.histplot(df['income_log'], bins=20, ax=ax[1], kde=True).set_title("Log-Transformed Income")
-        st.pyplot(fig)
+        st.markdown("### 📊 Class Distribution (`default`)")
+        st.dataframe(imbalance_df, use_container_width=True)
 
-    # Step 6: Drop Multicollinearity Column
-    if st.checkbox("🔁 Drop Correlated Column (income_2)"):
-        df.drop(columns=['income_2'], inplace=True)
-        st.success("✅ Dropped income_2")
+        st.markdown("### 🔎 Interpretation")
+        st.markdown("""
+        - The dataset is **imbalanced**, with:
+        - **78.4%** Non-defaulters (`0`)
+        - **21.6%** Defaulters (`1`)
+        - This imbalance can cause models to favor the majority class (`0`) and underperform on minority class (`1`)
+        - ✅ Recommendations:
+        - Use metrics like **Precision**, **Recall**, **F1-Score**, and **AUC-ROC**
+        - Apply **resampling techniques** (e.g., SMOTE, undersampling)
+        - Or use **class weighting** during model training
+        """)
 
-    # Step 7: Encode Categorical Columns
-    if st.checkbox("🔤 Label Encode Categorical Features"):
-        le = LabelEncoder()
-        for col in ['employment_type', 'marital_status']:
-            df[col] = le.fit_transform(df[col].astype(str))
-        st.success("✅ Label encoded.")
-        st.dataframe(df)
-
-    # Step 8: Class Imbalance Check
-    if st.checkbox("⚖️ Show Class Imbalance (Target Variable)"):
-        st.subheader("Class Distribution")
-        st.bar_chart(df['default'].value_counts())
-
-    # Step 9: Final Cleanup
-    if st.checkbox("🧽 Drop Duplicates and Reset Index"):
-        df.drop_duplicates(inplace=True)
-        df.reset_index(drop=True, inplace=True)
-        st.success("✅ Final cleanup done.")
-        st.dataframe(df)
-
-    st.markdown("---")
-    st.success("🎉 Data cleaning and visualization completed!")
+        st.success("🎉 Data cleaning and visualization completed! Now we can start exploring classification models!")
 
 with tabs[3]:
 
@@ -328,137 +391,6 @@ with tabs[3]:
         st.markdown("**✨ Key Point**: Projects data onto a lower-dimensional space for classification")
         st.markdown("**✅ Pros**: Works well with small datasets, interpretable")
         st.markdown("**⚠️ Cons**: Assumes normal distribution, sensitive to outliers")
-
-    # st.subheader("Exploratory Data Analysis")
-    # st.write("This is where you will explore the data.")
-
-    # with st.expander("**Why is Exploratory Data Analysis (EDA) Important in ML?**"):
-
-    #     st.markdown("""
-    #     **1. Data Quality Check**
-    #     📌 Identifies missing values, duplicates, and inconsistencies in the dataset.
-
-    #     **2. Feature Understanding**
-    #     🔍 Helps determine which features are relevant for model building.
-
-    #     **3. Outlier Detection**
-    #     🚨 Finds extreme values that could negatively impact model performance.
-
-    #     **4. Distribution Analysis**
-    #     📊 Understands how data is spread to apply proper preprocessing techniques.
-
-    #     **5. Correlation & Relationships**
-    #     🔗 Reveals dependencies between variables to improve feature selection.
-
-    #     **6. Improves Model Accuracy**
-    #     🚀 Ensures clean, well-structured data, leading to better predictions.
-    #     """)
-
-    #     st.info("Without proper EDA, even the best ML models may fail due to poor data quality.")
-
-    # st.markdown("**1. Data Cleaning**: Fill missing values using mean, median, or mode, or drop them if necessary.")
-
-    # if st.button("Clean the selected dataset", use_container_width=True):
-    #     file_path = raw_paths[selected_model]
-    #     missing_row_df = eda.check_missing_rows(file_path)
-    #     st.caption("Missing Rows Data")
-    #     st.dataframe(missing_row_df.head())
-    #     if missing_row_df.shape[0] > 0:
-    #         st.warning(f"{missing_row_df.shape[0]} Missing values found in the dataset! Please clean the data.")
-
-    #         with st.status("Cleaning... Please wait"):
-    #             eda.remove_missing_rows(file_path, missing_row_df)
-    #             time.sleep(3)
-    #             st.success("Data cleaned successfully!")
-        
-    #         st.markdown("### Data Cleaning Steps")
-    #         st.write("1. Identify missing values.")
-    #         st.write("2. Decide how to handle them (e.g., imputation, removal). We will remove them for simplicity.")
-    #         st.write("3. Apply the chosen method to clean the data.")
-    #         st.write("4. Verify that the data is clean.")
-
-    #     else:
-    #         st.success("No missing values found in the dataset! Proceed with EDA")
-    
-    # st.markdown("**2. Class Distribution Analysis**: Visualize class distribution to check if the data is balanced or imbalanced.")
-
-    # if st.button("View Class Distribution", use_container_width=True):
-    #     file_path = processed_paths[selected_model]
-    #     target_column = target_columns[selected_model]
-    #     with st.status("Plotting... Please wait"):
-    #         fig, ratio = eda.plot_class_distribution(file_path, target_column)
-    #         time.sleep(2)
-    #     st.pyplot(fig)
-
-    #     st.markdown(f"""
-    #     <div style="text-align: center;">
-    #         <p><strong>Class 0 (No Default):</strong> {ratio[0]:.2f}</p>
-    #         <p><strong>Class 1 (Default):</strong> {ratio[1]:.2f}</p>
-    #     </div>
-    #     """, unsafe_allow_html=True)
-
-    #     st.info("**Note**: Typically, if the ratio of the majority class to the minority class exceeds 80-20 (or is even more extreme, like 90-10), it’s considered imbalanced.")
-
-    #     if ratio[0] > 0.9:
-    #         st.warning("The dataset is imbalanced. Consider using techniques like SMOTE or ADASYN for balancing.")
-    #     else:
-    #         st.success("The dataset is balanced. No further action needed.")
-        
-    #     with st.expander("When is a dataset considered imbalanced?"):
-    #         markdown_text = """
-    #         A dataset is **imbalanced** when one class appears significantly more frequently than others.  
-    #         Typically, if the ratio of the majority class to the minority class exceeds **80-20** (or is even more extreme, like **90-10**),  
-    #         it’s considered imbalanced. This is a problem because models tend to favor the dominant class,  
-    #         leading to poor generalization and weak predictive power for the minority class.
-
-    #         ### **How to fix class imbalance?**
-    #         Here are some techniques to handle imbalance:
-
-    #         **1. Resampling (Oversampling & Undersampling)**  
-    #         - **Oversampling the minority class**: Create synthetic samples of the minority class using methods like  
-    #         **SMOTE (Synthetic Minority Over-sampling Technique)**.  
-    #         - **Undersampling the majority class**: Remove random samples from the dominant class to balance the dataset.
-
-    #         **2. Adjust Class Weights**  
-    #         - Many machine learning models allow you to set **class weights** so that errors in predicting the minority class  
-    #         are penalized more, forcing the model to pay attention to them.
-
-    #         **3. Use Different Evaluation Metrics**  
-    #         - Instead of accuracy (which is misleading in imbalanced datasets), use:  
-    #         - **Precision & Recall**  
-    #         - **F1-score**  
-    #         - **ROC-AUC (Receiver Operating Characteristic - Area Under Curve)**  
-
-    #         **4. Try Advanced Algorithms**  
-    #         Some algorithms handle imbalance better than others:  
-    #         - Tree-based methods like **XGBoost** allow you to set parameters to focus on rare events.  
-    #         - **Anomaly detection methods** (useful if minority cases are rare but crucial).  
-    #         """
-    #         st.markdown(markdown_text)
-
-    # st.markdown("**3. Data Visualization**: Use visualizations to understand relationships between features and the target variable.")
-    
-    # if st.button("View Data Visualization", use_container_width=True):
-    #     file_path = processed_paths[selected_model]
-    #     target_column = target_columns[selected_model]
-    #     with st.status("Plotting... Please wait"):
-    #         plot = eda.plot_feature_target_correlation(file_path, target_column)
-    #         time.sleep(2)
-    #     st.pyplot(plot)
-
-    #     st.markdown("### Insights from Feature-Target Correlation")
-    #     st.write("The bar chart above shows the correlation of each feature with the target variable. Here are some key insights:")
-        
-    #     st.markdown("""
-    #     - **PAY_0, PAY_2, PAY_3, PAY_4, PAY_5, PAY_6**: These features have the highest positive correlation with the target variable, indicating that repayment status is a strong predictor of default.
-    #     - **LIMIT_BAL**: Shows a slight negative correlation, suggesting that higher credit limits may reduce the likelihood of default.
-    #     - **BILL_AMT and PAY_AMT features**: These have weak correlations with the target, indicating they may not be as significant for predicting default.
-    #     - **ID**: Has almost no correlation with the target, as expected, since it is just an identifier.
-    #     """)
-
-    #     st.info("**Note**: Features with high correlation (positive or negative) are more likely to be important for the model. However, feature selection should also consider multicollinearity and domain knowledge.")
-
-    #     st.success("EDA completed! You can explore further by adding techniques like feature scaling, correlation heatmaps, or PCA. Once satisfied, proceed to the Model Training section.")
 
 with tabs[4]:
     st.subheader(f"🧠 {st.session_state.selected_model} – Step-by-Step Guide")
@@ -842,7 +774,31 @@ with tabs[4]:
         - **Darker colors** = purer nodes (stronger class dominance).
         """)
 
-        st.success("✅ You've walked through every step of Logistic Regression using a concrete example!")
+        st.success("✅ You've walked through every step of Decision Tree using a concrete example!")
+
+    elif st.session_state.selected_model == "Random Forest":
+        st.markdown("### 🔍 What is Random Forest?")
+        st.markdown("""
+        Random Forest is an ensemble method. It builds multiple decision trees during training and outputs the majority class (mode) for classification. It reduces overfitting and increases accuracy by combining many decision trees (a “forest”).
+        """)
+
+        # Title
+        st.markdown("### 🎾 Step 1. Bootstrap Sampling (Bagging)")
+
+        # Explanation
+        st.info("""
+        **What:**  
+        Create N different datasets by randomly sampling (with replacement) from the original data.
+
+        **Why:**  
+        Each sample will be used to build one decision tree. It reduces overfitting and increases accuracy
+                """)
+    
+        st.image("img\sampling.gif", use_column_width=True)
+
+        pass
+
+
     # model_name = st.selectbox("Select Model", models[selected_model])
 
     # st.markdown("### Model Parameters")

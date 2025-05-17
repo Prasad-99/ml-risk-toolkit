@@ -1,6 +1,7 @@
 import pandas as pd
 import matplotlib.pyplot as plt
 import seaborn as sns
+import streamlit as st
 
 def explore_data(file_path):
     raw_data = pd.read_csv(file_path)
@@ -50,4 +51,3 @@ def plot_feature_target_correlation(file_path, target_column):
     plt.xticks(rotation=45, ha='right')
 
     return plt
-
